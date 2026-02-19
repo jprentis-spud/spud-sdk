@@ -8,6 +8,8 @@ export interface SpudConfig {
   heartbeatIntervalMs?: number;
   /** How many ms before JWT expiry to trigger a silent refresh (default: 300000 = 5min) */
   refreshBeforeExpiryMs?: number;
+  /** Timeout in ms for all HTTP requests (default: 30000 = 30s) */
+  requestTimeoutMs?: number;
 }
 
 /** JWT payload fields the SDK inspects (subset — we only read what we need) */

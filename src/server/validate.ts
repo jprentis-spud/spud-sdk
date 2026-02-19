@@ -6,9 +6,11 @@ import type {
   SpudResponse,
   SpudServerConfig,
 } from "../types.js";
+import { fetchWithTimeout } from "../core/client.js";
 
 const DEFAULT_BASE_URL = "https://api.spud.dev";
 const DEFAULT_JWKS_CACHE_TTL_MS = 3_600_000; // 1 hour
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 // ── JWKS types ────────────────────────────────────────────────────────
 
@@ -46,13 +48,22 @@ interface Jwks {
 export class SpudValidator {
   private readonly baseUrl: string;
   private readonly jwksCacheTtlMs: number;
+  private readonly requestTimeoutMs: number;
   private jwksCache: Jwks | null = null;
   private jwksCachedAt = 0;
   private readonly cryptoKeyCache = new Map<string, CryptoKey>();
 
-  constructor(config: SpudServerConfig) {
+  constructor(config: SpudServerConfig & { requestTimeoutMs?: number }) {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.jwksCacheTtlMs = config.jwksCacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+
+  /** Clear cached JWKS and CryptoKeys. */
+  destroy(): void {
+    this.jwksCache = null;
+    this.jwksCachedAt = 0;
+    this.cryptoKeyCache.clear();
   }
 
   /** Fetch JWKS eagerly on startup to fail fast if unreachable. */
@@ -181,7 +192,11 @@ export class SpudValidator {
       return this.jwksCache;
     }
 
-    const res = await fetch(`${this.baseUrl}/.well-known/jwks.json`);
+    const res = await fetchWithTimeout(
+      `${this.baseUrl}/.well-known/jwks.json`,
+      {},
+      this.requestTimeoutMs,
+    );
     if (!res.ok) {
       throw new SpudError(
         `Failed to fetch JWKS: ${res.status} ${res.statusText}`,

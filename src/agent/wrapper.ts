@@ -1,4 +1,4 @@
-import { SpudClient } from "../core/client.js";
+import { SpudClient, fetchWithTimeout } from "../core/client.js";
 import { AgentContext } from "./context.js";
 import type {
   AgentConfig,
@@ -190,11 +190,15 @@ export class SpudProxy {
       headers.set("X-Spud-Token", token);
     }
 
-    return fetch(this.upstream, {
-      method: "POST",
-      headers,
-      body,
-    });
+    return fetchWithTimeout(
+      this.upstream,
+      {
+        method: "POST",
+        headers,
+        body,
+      },
+      this.client.timeoutMs,
+    );
   }
 }
 

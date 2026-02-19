@@ -7,6 +7,8 @@ import {
 const DEFAULT_BASE_URL = "https://api.spud.dev";
 const DEFAULT_HEARTBEAT_MS = 60_000;
 const DEFAULT_REFRESH_BEFORE_EXPIRY_MS = 5 * 60_000; // 5 minutes
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000; // 30 seconds
+const MAX_REASONABLE_TOKEN_LIFETIME_SEC = 7 * 24 * 3_600; // 7 days
 
 /**
  * Low-level API client that owns the JWT lifecycle.
@@ -22,6 +24,7 @@ export class SpudClient {
   private readonly apiKey: string;
   private readonly heartbeatMs: number;
   private readonly refreshBeforeExpiryMs: number;
+  private readonly requestTimeoutMs: number;
 
   private jwt: string | null = null;
   private jwtExpiresAt = 0; // Unix seconds
@@ -36,6 +39,8 @@ export class SpudClient {
     this.heartbeatMs = config.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS;
     this.refreshBeforeExpiryMs =
       config.refreshBeforeExpiryMs ?? DEFAULT_REFRESH_BEFORE_EXPIRY_MS;
+    this.requestTimeoutMs =
+      config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   // ── Bootstrap ──────────────────────────────────────────────────────
@@ -89,16 +94,19 @@ export class SpudClient {
       "Content-Type": "application/json",
     };
 
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      },
+      this.requestTimeoutMs,
+    );
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
       throw new SpudError(
-        `API request failed: ${res.status} ${res.statusText} — ${text}`,
+        `API request failed: ${res.status} ${res.statusText}`,
         "API_ERROR",
         res.status,
       );
@@ -111,22 +119,41 @@ export class SpudClient {
 
   private async fetchToken(): Promise<void> {
     const url = `${this.baseUrl}/v1/auth/token`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: this.apiKey }),
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: this.apiKey }),
+      },
+      this.requestTimeoutMs,
+    );
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
       throw new SpudError(
-        `Token exchange failed: ${res.status} ${res.statusText} — ${text}`,
+        `Token exchange failed: ${res.status} ${res.statusText}`,
         "AUTH_FAILED",
         res.status,
       );
     }
 
     const data = (await res.json()) as TokenResponse;
+
+    // Validate that expires_at is sane before trusting it
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (data.expires_at <= nowSec) {
+      throw new SpudError(
+        "Token exchange returned an already-expired token",
+        "INVALID_TOKEN",
+      );
+    }
+    if (data.expires_at > nowSec + MAX_REASONABLE_TOKEN_LIFETIME_SEC) {
+      throw new SpudError(
+        "Token exchange returned an unreasonable expiry",
+        "INVALID_TOKEN",
+      );
+    }
+
     this.jwt = data.token;
     this.jwtExpiresAt = data.expires_at;
   }
@@ -155,13 +182,17 @@ export class SpudClient {
     this.heartbeatTimer = setInterval(() => {
       if (this.destroyed || !this.jwt) return;
       // Fire-and-forget heartbeat — failures are non-fatal.
-      fetch(`${this.baseUrl}/v1/heartbeat`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.jwt}`,
-          "Content-Type": "application/json",
+      fetchWithTimeout(
+        `${this.baseUrl}/v1/heartbeat`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.jwt}`,
+            "Content-Type": "application/json",
+          },
         },
-      }).catch(() => {
+        this.requestTimeoutMs,
+      ).catch(() => {
         // Heartbeat failures are silently ignored.
       });
     }, this.heartbeatMs);
@@ -184,4 +215,28 @@ export class SpudClient {
   get authToken(): string | null {
     return this.jwt;
   }
+
+  /** Configured request timeout in ms. Used by the proxy and validator. */
+  get timeoutMs(): number {
+    return this.requestTimeoutMs;
+  }
+}
+
+// ── Fetch with timeout ─────────────────────────────────────────────────
+
+/**
+ * Wraps fetch with an AbortController-based timeout.
+ * Prevents hanging requests from blocking the application indefinitely.
+ */
+export function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timer);
+  });
 }

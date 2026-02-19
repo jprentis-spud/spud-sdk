@@ -118,6 +118,7 @@ describe("SpudValidator", () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         "https://api.test/.well-known/jwks.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
 
@@ -145,6 +146,7 @@ describe("SpudValidator", () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         "https://api.test/.well-known/jwks.json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
   });

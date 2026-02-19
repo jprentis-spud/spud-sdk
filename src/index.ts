@@ -182,7 +182,10 @@ export const SpudServer = {
       get isConnected() {
         return client.isConnected;
       },
-      destroy: () => client.destroy(),
+      destroy: () => {
+        validator.destroy();
+        client.destroy();
+      },
     };
   },
 };
