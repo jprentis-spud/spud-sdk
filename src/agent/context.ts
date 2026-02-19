@@ -48,12 +48,21 @@ export class AgentContext {
   /**
    * Run all enrichment hooks and merge results into a single context
    * object. Later hooks overwrite earlier ones on key collision.
+   *
+   * Uses `Promise.allSettled` so a single failing hook cannot block
+   * governance — rejected hooks are silently skipped.
    */
   async buildContext(toolCall: ToolCall): Promise<Record<string, unknown>> {
-    const results = await Promise.all(
+    const outcomes = await Promise.allSettled(
       this.hooks.map((hook) => hook(toolCall)),
     );
-    return Object.assign({}, ...results) as Record<string, unknown>;
+    const fulfilled = outcomes
+      .filter(
+        (o): o is PromiseFulfilledResult<Record<string, unknown>> =>
+          o.status === "fulfilled",
+      )
+      .map((o) => o.value);
+    return Object.assign({}, ...fulfilled) as Record<string, unknown>;
   }
 
   // ── Failure mode resolution ──────────────────────────────────────
