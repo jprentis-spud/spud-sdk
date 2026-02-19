@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Spud, SpudError } from "../src/index.js";
+import { Spud, SpudError, SpudAgent } from "../src/index.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -82,6 +82,23 @@ describe("Spud.init()", () => {
     await expect(
       Spud.init({ apiKey: "bad", baseUrl: "https://api.test" }),
     ).rejects.toThrow("Token exchange failed");
+  });
+
+  it("agent() returns a SpudAgent instance", async () => {
+    fetchSpy.mockResolvedValueOnce(jsonResponse(tokenResponse(3600)));
+
+    const spud = await Spud.init({
+      apiKey: "sk-test",
+      baseUrl: "https://api.test",
+    });
+
+    const agent = spud.agent({ mode: "enforcing" });
+    expect(agent).toBeInstanceOf(SpudAgent);
+
+    const agentDefault = spud.agent();
+    expect(agentDefault).toBeInstanceOf(SpudAgent);
+
+    spud.destroy();
   });
 
   it("exports SpudError class", () => {

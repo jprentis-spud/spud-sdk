@@ -167,7 +167,7 @@ export class SpudClient {
     }, this.heartbeatMs);
   }
 
-  // ── Accessors (primarily for testing) ──────────────────────────────
+  // ── Accessors ───────────────────────────────────────────────────────
 
   /** Whether the client currently holds a valid JWT. */
   get isConnected(): boolean {
@@ -178,5 +178,10 @@ export class SpudClient {
   get secondsUntilExpiry(): number {
     if (!this.jwt) return 0;
     return Math.max(this.jwtExpiresAt - Math.floor(Date.now() / 1000), 0);
+  }
+
+  /** Current JWT, or null if not connected. Used by the agent proxy. */
+  get authToken(): string | null {
+    return this.jwt;
   }
 }
