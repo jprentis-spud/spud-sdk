@@ -10,6 +10,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./vercel-ai": {
+      "import": "./dist/adapters/vercel-ai.js",
+      "types": "./dist/adapters/vercel-ai.d.ts"
+    },
+    "./langchain": {
+      "import": "./dist/adapters/langchain.js",
+      "types": "./dist/adapters/langchain.d.ts"
     }
   },
   "files": [
