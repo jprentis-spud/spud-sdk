@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/jprentis-spud/spud-sdk/main/assets/spud-logo.svg" alt="Spud" width="200" />
 </p>
 
-<h1 align="center">@spud-dev/sdk</h1>
+<h1 align="center">spud-sdk</h1>
 
 <p align="center">
   Belt and Braces governance SDK for AI agents.
@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-  <a href="https://www.npmjs.com/package/@spud-dev/sdk"><img src="https://img.shields.io/npm/v/@spud-dev/sdk.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/spud-sdk"><img src="https://img.shields.io/npm/v/spud-sdk.svg" alt="npm version" /></a>
 </p>
 
 ---
@@ -20,13 +20,13 @@ Policy enforcement, trust scoring, and immutable audit trails for every tool cal
 ## Install
 
 ```bash
-npm install @spud-dev/sdk
+npm install spud-sdk
 ```
 
 ## Quick Start
 
 ```ts
-import { Spud } from "@spud-dev/sdk";
+import { Spud } from "spud-sdk";
 
 // 1. Initialise
 const spud = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
@@ -93,7 +93,7 @@ agent.enrichContext(async (toolCall) => ({
 The "Braces" side — validate governance tokens on your tool server and close the audit loop.
 
 ```ts
-import { SpudServer } from "@spud-dev/sdk";
+import { SpudServer } from "spud-sdk";
 import express from "express";
 
 const server = await SpudServer.init({ apiKey: process.env.SPUD_API_KEY! });
@@ -137,8 +137,8 @@ const claims = await server.validateToken(jwtString);
 **Middleware** — intercepts tool calls at the model output level:
 
 ```ts
-import { Spud } from "@spud-dev/sdk";
-import { spudMiddleware } from "@spud-dev/sdk/vercel-ai";
+import { Spud } from "spud-sdk";
+import { spudMiddleware } from "spud-sdk/vercel-ai";
 import { wrapLanguageModel, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 
@@ -156,7 +156,7 @@ const result = await generateText({ model, tools, prompt: "..." });
 **Tool wrapping** — intercepts at execution time:
 
 ```ts
-import { wrapTools } from "@spud-dev/sdk/vercel-ai";
+import { wrapTools } from "spud-sdk/vercel-ai";
 
 const governed = wrapTools(agent, {
   weather: tool({ ... }),
@@ -171,7 +171,7 @@ const result = await generateText({ model, tools: governed, prompt: "..." });
 Wrap individual tools or arrays. Preserves prototype chains for `instanceof` checks:
 
 ```ts
-import { wrapTools } from "@spud-dev/sdk/langchain";
+import { wrapTools } from "spud-sdk/langchain";
 
 const tools = wrapTools(agent, [searchTool, calculatorTool, emailTool]);
 
