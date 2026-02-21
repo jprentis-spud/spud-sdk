@@ -1,5 +1,5 @@
 {
-  "name": "@spud-dev/sdk",
+  "name": "spud-sdk",
   "version": "0.1.0",
   "description": "Belt and Braces governance SDK for AI agents. Policy enforcement, trust scoring, and immutable audit trails.",
   "license": "MIT",
