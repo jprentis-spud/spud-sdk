@@ -1,63 +1,99 @@
-# @spud/sdk
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jprentis-spud/spud-sdk/main/assets/spud-logo.svg" alt="Spud" width="200" />
+</p>
 
-Belt and Braces governance for AI agents. One SDK, three integration modes — wrap your agent's tool calls, validate tokens on your tool server, or proxy traffic for closed platforms.
+<h1 align="center">@spud-dev/sdk</h1>
+
+<p align="center">
+  Belt and Braces governance SDK for AI agents.
+</p>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://www.npmjs.com/package/@spud-dev/sdk"><img src="https://img.shields.io/npm/v/@spud-dev/sdk.svg" alt="npm version" /></a>
+</p>
+
+---
+
+Policy enforcement, trust scoring, and immutable audit trails for every tool call your AI agent makes.
 
 ## Install
 
 ```bash
-npm install @spud/sdk
+npm install @spud-dev/sdk
 ```
 
-## Quickstart
+## Quick Start
 
 ```ts
-import { Spud } from "@spud/sdk";
+import { Spud } from "@spud-dev/sdk";
 
-const spud  = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
+// 1. Initialise
+const spud = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
+
+// 2. Wrap your agent
 const agent = spud.agent({ mode: "enforcing" });
 
-const { proceed } = await agent.intercept({ name: "send_email", arguments: { to: "cfo@acme.com" } });
-```
-
-Three lines: init, create an agent, check governance. Every tool call your agent makes can be governed before it executes.
-
-## Integration Modes
-
-Spud provides three ways to add governance depending on where you can insert code.
-
-### Belt — Agent Wrapper
-
-Use when you **own the agent code**. The SDK wraps outbound tool calls with governance checks before they execute.
-
-```ts
-import { Spud } from "@spud/sdk";
-
-const spud  = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
-const agent = spud.agent({ mode: "enforcing" });
-
-// Add business context to every governance decision
-agent.enrichContext(async (toolCall) => ({
-  user_id: session.userId,
-  org_id:  session.orgId,
-}));
-
-// Check governance before executing a tool
+// 3. Govern tool calls
 const { proceed, decision } = await agent.intercept({
-  name: "delete_record",
-  arguments: { table: "users", id: 42 },
+  name: "send_email",
+  arguments: { to: "cfo@acme.com" },
 });
 
 if (proceed) {
-  await executeTool("delete_record", { table: "users", id: 42 });
+  await sendEmail("cfo@acme.com");
 }
 ```
 
-### Braces — Server Validator
+Three lines: init, wrap, govern. Every tool call your agent makes can be checked before it executes.
 
-Use when you **own the tool server**. Validates the Spud JWT attached by the agent (or proxy) so your server can verify governance was applied, then closes the audit loop by reporting the execution outcome.
+## Governance Modes
+
+Control how the SDK reacts to governance decisions:
+
+| Mode | Denied tool call | Governance unreachable | Use case |
+|------|-----------------|----------------------|----------|
+| `"enforcing"` | **Blocked** | Applies failure policy | Production |
+| `"permissive"` | Allowed (logged) | Allowed (logged) | Rollout — observe before enforcing |
+| `"dry-run"` | Allowed (not logged) | Allowed | Development — test policies |
 
 ```ts
-import { SpudServer } from "@spud/sdk";
+const agent = spud.agent({ mode: "enforcing" });
+```
+
+### Failure Policy
+
+When governance is unreachable, control per-tool behaviour with trailing wildcard patterns:
+
+```ts
+const agent = spud.agent({
+  mode: "enforcing",
+  failurePolicy: {
+    failOpen:   ["get_*", "list_*", "search_*"],
+    failClosed: ["delete_*", "send_*", "execute_*"],
+    default:    "closed",
+  },
+});
+```
+
+### Enrichment Hooks
+
+Add business context to every governance request. Hooks run concurrently and results are merged:
+
+```ts
+agent.enrichContext(async (toolCall) => ({
+  user_id: session.userId,
+  org_id:  session.orgId,
+  role:    session.role,
+}));
+```
+
+## Server SDK
+
+The "Braces" side — validate governance tokens on your tool server and close the audit loop.
+
+```ts
+import { SpudServer } from "@spud-dev/sdk";
 import express from "express";
 
 const server = await SpudServer.init({ apiKey: process.env.SPUD_API_KEY! });
@@ -74,52 +110,35 @@ app.post("/tools/execute", async (req, res) => {
   await server.report({
     event_id: req.spud.event_id,
     result: "success",
-    metadata: { tool: req.body.name },
   });
 
   res.json(result);
 });
 ```
 
-### Proxy — For Closed Platforms
+### Validate (Web API)
 
-Use when you **don't control the agent or the tool server** — platforms like Salesforce Agentforce, ElevenLabs, or any system where you can only configure a tool URL.
-
-Point the platform at `proxy.spud.rocks` instead of the direct tool URL. Spud sits in the middle, applies governance to every `tools/call` request, attaches the JWT, and forwards permitted calls to the real upstream.
-
-```
-Agent (Agentforce, ElevenLabs, etc.)
-  │
-  ▼
-proxy.spud.rocks          ← governance applied here
-  │
-  ▼
-Your MCP server / tool API
-```
-
-For self-hosted proxy scenarios, the SDK provides an MCP HTTP proxy you can run yourself:
+For non-Express frameworks (Hono, Bun, Deno, Cloudflare Workers):
 
 ```ts
-const spud  = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
-const agent = spud.agent({ mode: "enforcing" });
-const proxy = agent.proxy({ upstream: "http://your-mcp-server:3000" });
+const claims = await server.validate(request); // reads X-Spud-Token header
+```
 
-// proxy.handler is (Request) => Promise<Response>
-// Use with any Web-API-compatible server (Node 18+, Bun, Deno, Workers)
-Bun.serve({ fetch: proxy.handler, port: 8080 });
+### Validate Token (raw)
+
+```ts
+const claims = await server.validateToken(jwtString);
 ```
 
 ## Framework Adapters
 
 ### Vercel AI SDK
 
-Two options: middleware (intercepts at the model output level) or tool wrapping (intercepts at execution time).
-
-**Option A — Middleware** (intercepts `generateText` and `streamText` tool calls):
+**Middleware** — intercepts tool calls at the model output level:
 
 ```ts
-import { Spud } from "@spud/sdk";
-import { spudMiddleware } from "@spud/sdk/vercel-ai";
+import { Spud } from "@spud-dev/sdk";
+import { spudMiddleware } from "@spud-dev/sdk/vercel-ai";
 import { wrapLanguageModel, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 
@@ -131,120 +150,58 @@ const model = wrapLanguageModel({
   middleware: spudMiddleware(agent),
 });
 
-// Denied tool calls are silently removed from the model response
 const result = await generateText({ model, tools, prompt: "..." });
 ```
 
-**Option B — Tool wrapping** (wraps each tool's `execute` directly):
+**Tool wrapping** — intercepts at execution time:
 
 ```ts
-import { Spud } from "@spud/sdk";
-import { wrapTools } from "@spud/sdk/vercel-ai";
-import { generateText, tool } from "ai";
-import { z } from "zod";
+import { wrapTools } from "@spud-dev/sdk/vercel-ai";
 
-const spud  = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
-const agent = spud.agent({ mode: "enforcing" });
-
-const tools = wrapTools(agent, {
-  weather: tool({
-    description: "Get current weather",
-    parameters: z.object({ location: z.string() }),
-    execute: async ({ location }) => fetchWeather(location),
-  }),
-  sendEmail: tool({
-    description: "Send an email",
-    parameters: z.object({ to: z.string(), body: z.string() }),
-    execute: async ({ to, body }) => sendEmail(to, body),
-  }),
+const governed = wrapTools(agent, {
+  weather: tool({ ... }),
+  sendEmail: tool({ ... }),
 });
 
-// Denied tools throw SpudError with code "TOOL_DENIED"
-const result = await generateText({ model, tools, prompt: "..." });
+const result = await generateText({ model, tools: governed, prompt: "..." });
 ```
 
-### LangChain.js
+### LangChain
 
-Wrap individual tools or an entire array. Preserves the prototype chain so `instanceof` checks still work.
+Wrap individual tools or arrays. Preserves prototype chains for `instanceof` checks:
 
 ```ts
-import { Spud } from "@spud/sdk";
-import { wrapTools } from "@spud/sdk/langchain";
-import { ChatOpenAI } from "@langchain/openai";
-import { createToolCallingAgent, AgentExecutor } from "langchain/agents";
-
-const spud  = await Spud.init({ apiKey: process.env.SPUD_API_KEY! });
-const agent = spud.agent({ mode: "enforcing" });
+import { wrapTools } from "@spud-dev/sdk/langchain";
 
 const tools = wrapTools(agent, [searchTool, calculatorTool, emailTool]);
 
-const llm = new ChatOpenAI({ model: "gpt-4o" });
-const lcAgent = await createToolCallingAgent({ llm, tools, prompt });
 const executor = new AgentExecutor({ agent: lcAgent, tools });
-
-// Each tool.invoke() checks governance before executing
 const result = await executor.invoke({ input: "..." });
 ```
 
-## Governance Modes
+## MCP Proxy
 
-Control how the SDK reacts to governance decisions.
-
-| Mode | Denied tool call | Governance unreachable | Use case |
-|------|-----------------|----------------------|----------|
-| `"enforcing"` | **Blocked** | Applies failure policy | Production — full governance |
-| `"permissive"` | Allowed (logged) | Allowed (logged) | Rollout — observe before enforcing |
-| `"dry-run"` | Allowed (not logged) | Allowed | Development — test policies without impact |
+For closed platforms (Salesforce Agentforce, ElevenLabs, etc.) where you can only configure a tool URL:
 
 ```ts
-const agent = spud.agent({ mode: "enforcing" });
+const proxy = agent.proxy({ upstream: "http://your-mcp-server:3000" });
+
+// proxy.handler is (Request) => Promise<Response>
+Bun.serve({ fetch: proxy.handler, port: 8080 });
 ```
 
-## Failure Modes
+## Documentation
 
-When the governance service is unreachable, the failure policy determines whether each tool is allowed or denied. Tool name patterns support trailing wildcards.
+Full documentation is available at [spud-site.vercel.app/docs](https://spud-site.vercel.app/docs).
 
-| Policy | Behaviour when governance is down | Example |
-|--------|----------------------------------|---------|
-| `failOpen` | Tool is **allowed** | Read-only tools: `"get_*"`, `"list_*"` |
-| `failClosed` | Tool is **denied** | Destructive tools: `"delete_*"`, `"send_*"` |
-| `default` | Applies when a tool matches neither list | `"closed"` (default) or `"open"` |
-
-```ts
-const agent = spud.agent({
-  mode: "enforcing",
-  failurePolicy: {
-    failOpen:   ["get_*", "list_*", "search_*"],
-    failClosed: ["delete_*", "send_*", "execute_*"],
-    default:    "closed",
-  },
-});
-```
-
-## Enrichment Hooks
-
-Add business context to every governance request. Hooks run concurrently and their results are merged (later hooks overwrite on key collision).
-
-```ts
-agent.enrichContext(async (toolCall) => ({
-  user_id: session.userId,
-  org_id:  session.orgId,
-  role:    session.role,
-}));
-
-agent.enrichContext(async (toolCall) => ({
-  ip_address: request.ip,
-  user_agent: request.headers["user-agent"],
-}));
-```
-
-## Scripts
+## Development
 
 ```bash
-pnpm build        # Compile TypeScript to dist/
-pnpm test         # Run all tests
-pnpm lint         # Lint src/ and tests/
-pnpm typecheck    # Type-check without emitting
+pnpm install       # Install dependencies
+pnpm build         # Build with tsup (ESM + CJS + DTS)
+pnpm test          # Run all tests
+pnpm lint          # Lint src/ and tests/
+pnpm typecheck     # Type-check without emitting
 ```
 
 ## License

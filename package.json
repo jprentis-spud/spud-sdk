@@ -1,39 +1,76 @@
 {
-  "name": "@spud/sdk",
+  "name": "@spud-dev/sdk",
   "version": "0.1.0",
-  "description": "Spud SDK — Belt and Braces governance for AI agents",
+  "description": "Belt and Braces governance SDK for AI agents. Policy enforcement, trust scoring, and immutable audit trails.",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./vercel-ai": {
-      "import": "./dist/adapters/vercel-ai.js",
-      "types": "./dist/adapters/vercel-ai.d.ts"
+      "import": {
+        "types": "./dist/adapters/vercel-ai.d.ts",
+        "default": "./dist/adapters/vercel-ai.js"
+      },
+      "require": {
+        "types": "./dist/adapters/vercel-ai.d.cts",
+        "default": "./dist/adapters/vercel-ai.cjs"
+      }
     },
     "./langchain": {
-      "import": "./dist/adapters/langchain.js",
-      "types": "./dist/adapters/langchain.d.ts"
+      "import": {
+        "types": "./dist/adapters/langchain.d.ts",
+        "default": "./dist/adapters/langchain.js"
+      },
+      "require": {
+        "types": "./dist/adapters/langchain.d.cts",
+        "default": "./dist/adapters/langchain.cjs"
+      }
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/ tests/",
     "typecheck": "tsc --noEmit"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jprentis-spud/spud-sdk"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "governance",
+    "trust",
+    "sdk",
+    "mcp",
+    "a2a",
+    "policy",
+    "audit"
+  ],
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^25.3.0",
     "eslint": "^9.0.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^3.0.0"
